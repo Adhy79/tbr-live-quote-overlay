@@ -27,6 +27,20 @@ export default function OverlayPreview({
           </h2>
         </div>
         <div className="flex items-center gap-2">
+          {onToggleSafeZone && (
+            <button
+              onClick={() => onToggleSafeZone(!showSafeZone)}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono border transition-all ${
+                showSafeZone
+                  ? 'bg-cyber-cyan/20 border-cyber-cyan text-cyber-cyan shadow-neon-cyan/30 shadow-sm'
+                  : 'bg-cyber-surface border-cyber-border text-gray-400 hover:text-white'
+              }`}
+              title="Toggle TikTok LIVE Safe Zone guides"
+            >
+              <Shield className="w-3 h-3" />
+              <span>SAFE ZONE: {showSafeZone ? 'ON' : 'OFF'}</span>
+            </button>
+          )}
           <span className="text-[10px] font-mono text-gray-400 bg-cyber-surface px-2 py-0.5 rounded border border-cyber-border">
             1080 × 1920 (9:16)
           </span>

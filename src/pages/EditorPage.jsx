@@ -226,6 +226,8 @@ export default function EditorPage() {
           <PositionControls
             state={overlayState}
             onChange={handleStateChange}
+            showSafeZone={showSafeZone}
+            onToggleSafeZone={setShowSafeZone}
           />
 
           {/* Typography, Glow & Frame Controls */}

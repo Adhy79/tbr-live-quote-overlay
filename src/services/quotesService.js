@@ -28,11 +28,16 @@ export const ENGLISH_CATEGORIES = [
 export const CATEGORIES = INDONESIAN_CATEGORIES;
 
 export const STYLES = [
-  { id: 'cyber-cyan', name: 'Cyber Neon Cyan', desc: 'Electric cyan HUD glow with corner telemetry brackets' },
-  { id: 'void-blue', name: 'Deep Royal Blue', desc: 'Sleek cobalt glow with minimal broadcast borders' },
-  { id: 'matrix-amber', name: 'Matrix Scanline', desc: 'Amber-cyan digital telemetry with scanline grid' },
-  { id: 'glitch-neon', name: 'Glitch Horizon', desc: 'High-contrast chromatic neon frame with HUD markers' },
-  { id: 'clean-studio', name: 'Clean Broadcast', desc: 'Minimalist studio lower-frame with soft white glow' }
+  { id: 'cyber-cyan', name: 'Cyber Radio', icon: '⚡', desc: 'Futuristic neon HUD, telemetry brackets & electric cyber glow' },
+  { id: 'cinematic-night', name: 'Cinematic Night', icon: '🌙', desc: 'Minimal cinematic typography, widescreen rules & nocturnal space' },
+  { id: 'minimal-aesthetic', name: 'Minimal Aesthetic', icon: '✦', desc: 'Clean modern layout, delicate geometric marks & generous whitespace' },
+  { id: 'soft-pastel', name: 'Soft Pastel', icon: '🌸', desc: 'Dusty pink, sage & lavender typography accents on pure transparent canvas' },
+  { id: 'scrapbook', name: 'Scrapbook', icon: '✂', desc: 'Washi-tape strips, torn paper labels, stars & handmade collage accents' },
+  { id: 'handwritten-diary', name: 'Handwritten Diary', icon: '✍', desc: 'Intimate handwritten script accents, underline strokes & playful doodles' },
+  { id: 'editorial', name: 'Editorial', icon: '📰', desc: 'Modern magazine composition, bold serif hierarchy & architectural rules' },
+  { id: 'dark-minimal', name: 'Dark Minimal', icon: '◼', desc: 'Ultra-restrained monochrome aesthetic with subtle off-white tones' },
+  { id: 'classic-radio', name: 'Classic Radio', icon: '📻', desc: 'Retro broadcast dials, frequency meters & vintage ON AIR indicators' },
+  { id: 'diary-night', name: 'Diary Night', icon: '🌙', desc: 'TBR midnight session hybrid: handwritten intimacy meets nocturnal cinema' }
 ];
 
 export const ENGLISH_QUOTES = [
@@ -965,7 +970,7 @@ export function getDefaultOverlayState(channelId = 'tbr-default') {
     quotePosY: 960,
     headerPosY: 260,
     subHeaderPosY: 330,
-    footerPosY: 1700,
+    footerPosY: 1200,
     glowIntensity: 80,
     frameOpacity: 85,
     headerText: 'THE BONTOT RADIO',

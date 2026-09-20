@@ -1,17 +1,42 @@
 import React from 'react';
-import { MoveVertical, RotateCcw } from 'lucide-react';
+import { MoveVertical, RotateCcw, Shield } from 'lucide-react';
 
 export default function PositionControls({
   state,
-  onChange
+  onChange,
+  showSafeZone,
+  onToggleSafeZone
 }) {
   const resetPositions = () => {
     onChange({
       quotePosY: 960,
       headerPosY: 260,
       subHeaderPosY: 330,
-      footerPosY: 1700
+      footerPosY: 1200
     });
+  };
+
+  // Determine current footer zone for live feedback
+  const getFooterZoneBadge = (posY) => {
+    if (posY <= 1280) {
+      return (
+        <span className="text-[10px] font-mono text-cyber-cyan bg-cyber-cyan/10 px-2 py-0.5 rounded border border-cyber-cyan/30">
+          SAFE ZONE
+        </span>
+      );
+    }
+    if (posY <= 1450) {
+      return (
+        <span className="text-[10px] font-mono text-cyber-yellow bg-cyber-yellow/10 px-2 py-0.5 rounded border border-cyber-yellow/30">
+          WARNING ZONE
+        </span>
+      );
+    }
+    return (
+      <span className="text-[10px] font-mono text-red-400 bg-red-400/10 px-2 py-0.5 rounded border border-red-400/30">
+        COMMENTS OCCLUSION
+      </span>
+    );
   };
 
   return (
@@ -23,14 +48,30 @@ export default function PositionControls({
             Vertical Positioning (Y-Axis)
           </h2>
         </div>
-        <button
-          onClick={resetPositions}
-          className="flex items-center gap-1 text-[11px] font-mono text-gray-400 hover:text-cyber-cyan transition-colors"
-          title="Reset positions to default coordinates"
-        >
-          <RotateCcw className="w-3 h-3" />
-          <span>RESET DEFAULTS</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {onToggleSafeZone && (
+            <button
+              onClick={() => onToggleSafeZone(!showSafeZone)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono border transition-all ${
+                showSafeZone
+                  ? 'bg-cyber-cyan/20 border-cyber-cyan text-cyber-cyan shadow-neon-cyan/30 shadow-sm'
+                  : 'bg-cyber-surface border-cyber-border text-gray-400 hover:text-white'
+              }`}
+              title="Toggle TikTok LIVE Safe Zone guidelines on preview canvas"
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>SAFE ZONE: {showSafeZone ? 'ON' : 'OFF'}</span>
+            </button>
+          )}
+          <button
+            onClick={resetPositions}
+            className="flex items-center gap-1 text-[11px] font-mono text-gray-400 hover:text-cyber-cyan transition-colors"
+            title="Reset positions to default coordinates"
+          >
+            <RotateCcw className="w-3 h-3" />
+            <span>RESET DEFAULTS</span>
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -100,25 +141,29 @@ export default function PositionControls({
           </div>
         </div>
 
-        {/* Footer Y Position */}
+        {/* Footer Y Position with TikTok Safe Zone integration */}
         <div className="space-y-1.5">
-          <div className="flex justify-between text-xs font-mono">
+          <div className="flex justify-between items-center text-xs font-mono">
             <span className="text-gray-300">FOOTER POSITION Y</span>
-            <span className="text-cyber-cyan font-bold">{state.footerPosY} px</span>
+            <div className="flex items-center gap-2">
+              {getFooterZoneBadge(state.footerPosY)}
+              <span className="text-cyber-cyan font-bold">{state.footerPosY} px</span>
+            </div>
           </div>
           <input
             type="range"
-            min="1300"
-            max="1850"
+            min="800"
+            max="1800"
             step="10"
             value={state.footerPosY}
             onChange={(e) => onChange({ footerPosY: Number(e.target.value) })}
             className="w-full"
           />
-          <div className="flex justify-between text-[10px] text-gray-600 font-mono">
-            <span>1300 px</span>
-            <span>Default (1700)</span>
-            <span>1850 px</span>
+          <div className="flex justify-between text-[10px] font-mono">
+            <span className="text-cyber-cyan">800 px (Safe)</span>
+            <span className="text-cyber-cyan font-bold">Default (1200)</span>
+            <span className="text-cyber-yellow">1280 (Warn)</span>
+            <span className="text-red-400">1800 (Blocked)</span>
           </div>
         </div>
       </div>

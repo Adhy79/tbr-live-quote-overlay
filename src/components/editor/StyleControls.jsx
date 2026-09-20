@@ -65,35 +65,44 @@ export default function StyleControls({
 
       {/* Visual Style Cards */}
       <div>
-        <label className="block text-xs font-mono text-gray-400 mb-2">
-          OVERLAY THEME PRESET
-        </label>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-xs font-mono text-gray-400">
+            OVERLAY STYLE
+          </label>
+          <span className="text-[10px] font-mono text-cyber-cyan">
+            {STYLES.length} THEMES AVAILABLE
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           {STYLES.map(style => {
             const isSelected = state.styleId === style.id;
             return (
               <button
                 key={style.id}
+                type="button"
                 onClick={() => onChange({ styleId: style.id })}
                 className={clsx(
-                  'text-left p-2.5 rounded-lg border transition-all relative overflow-hidden',
+                  'text-left p-3 rounded-lg border transition-all relative overflow-hidden group',
                   isSelected
-                    ? 'border-cyber-cyan bg-cyber-cyan/10 shadow-neon-cyan/20 shadow-md'
-                    : 'border-cyber-border bg-cyber-surface/60 hover:border-cyber-border hover:bg-cyber-surface'
+                    ? 'border-cyber-cyan bg-cyber-cyan/15 shadow-neon-cyan/25 shadow-md'
+                    : 'border-cyber-border bg-cyber-surface/60 hover:border-cyber-cyan/40 hover:bg-cyber-surface'
                 )}
               >
-                <div className="flex items-center justify-between mb-1">
-                  <span className={clsx(
-                    'text-xs font-bold font-mono tracking-wide',
-                    isSelected ? 'text-cyber-cyan' : 'text-gray-200'
-                  )}>
-                    {style.name}
-                  </span>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm">{style.icon || '✦'}</span>
+                    <span className={clsx(
+                      'text-xs font-bold font-mono tracking-wider uppercase',
+                      isSelected ? 'text-cyber-cyan' : 'text-gray-200 group-hover:text-white'
+                    )}>
+                      {style.name}
+                    </span>
+                  </div>
                   {isSelected && (
-                    <span className="w-2 h-2 rounded-full bg-cyber-cyan animate-pulse" />
+                    <span className="w-2 h-2 rounded-full bg-cyber-cyan animate-pulse shadow-neon-cyan" />
                   )}
                 </div>
-                <p className="text-[11px] text-gray-400 font-sans leading-relaxed">
+                <p className="text-[11px] text-gray-400 font-sans leading-relaxed line-clamp-2">
                   {style.desc}
                 </p>
               </button>
