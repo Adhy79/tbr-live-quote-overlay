@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Ensure full transparency for OBS Studio Browser Source */
+html,
+body,
+#root {
+  background-color: transparent !important;
+  background: transparent !important;
+}
+
 :root {
   color-scheme: dark;
 }
@@ -79,3 +87,6 @@ input[type=range]::-webkit-slider-thumb {
 input[type=range]::-webkit-slider-thumb:hover {
   transform: scale(1.2);
 }
+
+/* Production transparency fix */
+canvas { background: transparent !important; }

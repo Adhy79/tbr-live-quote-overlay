@@ -16,7 +16,7 @@ import { getTheme } from './themes.js';
  */
 export function renderOverlay(canvas, state, options = {}) {
   if (!canvas) return;
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { alpha: true });
   if (!ctx) return;
 
   const width = 1080;

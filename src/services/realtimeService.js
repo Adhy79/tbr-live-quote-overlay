@@ -78,52 +78,73 @@ export async function publishOverlayUpdate(channelId, payload, existingChannel =
     return { success: false, status: 'NOT_CONFIGURED', error: new Error('Supabase is not configured') };
   }
 
-  // If a ready channel was passed in, send through it directly
-  if (existingChannel) {
-    try {
-      const resp = await existingChannel.send({
-        type: 'broadcast',
-        event: 'overlay_update',
-        payload: {
-          ...payload,
-          channelId,
-          timestamp: Date.now()
-        }
-      });
-      return { success: resp === 'ok', status: resp };
-    } catch (err) {
-      return { success: false, status: 'ERROR', error: err };
-    }
+  const timestamp = payload.timestamp || Date.now();
+  const enrichedPayload = {
+    ...payload,
+    channelId,
+    timestamp
+  };
+
+  // [RealtimeService] publishOverlayUpdate called
+console.info('[RealtimeService] PUSH TO LIVE started for channel', channelId);
+
+// Upsert the current state into Supabase persistence table
+try {
+  const { error: upsertError } = await supabase
+    .from('overlay_state')
+    .upsert({ channel: channelId, state: enrichedPayload }, { onConflict: 'channel' });
+  if (upsertError) {
+    console.error('[RealtimeService] database upsert ERROR:', upsertError);
+  } else {
+    console.info('[RealtimeService] database upsert SUCCESS');
   }
+} catch (e) {
+  console.error('[RealtimeService] database upsert EXCEPTION:', e);
+}
 
-  // Otherwise create a temporary channel
-  return new Promise((resolve) => {
-    const channel = supabase.channel(channelName, {
-      config: { broadcast: { ack: true } }
+// After persisting, broadcast overlay update
+console.info('[RealtimeService] broadcasting overlay_update');
+if (existingChannel) {
+  try {
+    const resp = await existingChannel.send({
+      type: 'broadcast',
+      event: 'overlay_update',
+      payload: enrichedPayload
     });
+    console.info('[RealtimeService] broadcast SUCCESS, response:', resp);
+    return { success: resp === 'ok', status: resp };
+  } catch (err) {
+    console.error('[RealtimeService] broadcast ERROR:', err);
+    return { success: false, status: 'ERROR', error: err };
+  }
+}
 
-    channel.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        try {
-          const resp = await channel.send({
-            type: 'broadcast',
-            event: 'overlay_update',
-            payload: {
-              ...payload,
-              channelId,
-              timestamp: Date.now()
-            }
-          });
-          supabase.removeChannel(channel);
-          resolve({ success: resp === 'ok', status: resp });
-        } catch (err) {
-          supabase.removeChannel(channel);
-          resolve({ success: false, status: 'ERROR', error: err });
-        }
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        supabase.removeChannel(channel);
-        resolve({ success: false, status });
-      }
-    });
+// Otherwise create a temporary channel and send broadcast
+return new Promise((resolve) => {
+  const channel = supabase.channel(channelName, {
+    config: { broadcast: { ack: true } }
   });
+  channel.subscribe(async (status) => {
+    if (status === 'SUBSCRIBED') {
+      try {
+        const resp = await channel.send({
+          type: 'broadcast',
+          event: 'overlay_update',
+          payload: enrichedPayload
+        });
+        console.info('[RealtimeService] temp channel broadcast SUCCESS, response:', resp);
+        supabase.removeChannel(channel);
+        resolve({ success: resp === 'ok', status: resp });
+      } catch (err) {
+        console.error('[RealtimeService] temp channel broadcast ERROR:', err);
+        supabase.removeChannel(channel);
+        resolve({ success: false, status: 'ERROR', error: err });
+      }
+    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+      console.warn('[RealtimeService] channel subscription error status:', status);
+      supabase.removeChannel(channel);
+      resolve({ success: false, status });
+    }
+  });
+});
 }

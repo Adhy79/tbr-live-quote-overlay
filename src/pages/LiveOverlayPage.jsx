@@ -37,7 +37,28 @@ export default function LiveOverlayPage() {
     };
   }, []);
 
-  // 1. Initial Render & Redraw whenever overlayState changes
+  // 1. Enforce strict background transparency on HTML and BODY for OBS Studio Browser Source
+  useEffect(() => {
+    const prevHtmlBg = document.documentElement.style.background;
+    const prevHtmlBgColor = document.documentElement.style.backgroundColor;
+    const prevBodyBg = document.body.style.background;
+    const prevBodyBgColor = document.body.style.backgroundColor;
+
+    document.documentElement.style.setProperty('background', 'transparent', 'important');
+    document.documentElement.style.setProperty('background-color', 'transparent', 'important');
+    document.body.style.setProperty('background', 'transparent', 'important');
+    document.body.style.setProperty('background-color', 'transparent', 'important');
+    document.body.classList.remove('bg-cyber-bg');
+
+    return () => {
+      document.documentElement.style.background = prevHtmlBg;
+      document.documentElement.style.backgroundColor = prevHtmlBgColor;
+      document.body.style.background = prevBodyBg;
+      document.body.style.backgroundColor = prevBodyBgColor;
+    };
+  }, []);
+
+  // 2. Initial Render & Redraw whenever overlayState changes
   useEffect(() => {
     if (canvasRef.current) {
       renderOverlay(canvasRef.current, overlayState, { showSafeZone: false });
@@ -62,7 +83,7 @@ export default function LiveOverlayPage() {
     const channelName = getChannelName(channelId);
     setStatus('CONNECTING');
 
-    // Subscribe to channel
+    // Subscribe to channel (broadcast only)
     const channel = supabase.channel(channelName, {
       config: {
         broadcast: { ack: true }
@@ -76,11 +97,7 @@ export default function LiveOverlayPage() {
       (eventData) => {
         if (eventData && eventData.payload) {
           const payload = eventData.payload;
-
-          // 1. Validate payload has valid quote or required fields
           if (typeof payload === 'object' && payload !== null) {
-            // 2. Replace active state
-            // 3. Trigger immediate canvas redraw
             setOverlayState(prev => ({
               ...prev,
               ...payload
@@ -90,11 +107,32 @@ export default function LiveOverlayPage() {
       }
     );
 
-    // Subscribe
-    channel.subscribe((subStatus, err) => {
+    // Subscribe and handle initial state fetch
+    channel.subscribe(async (subStatus, err) => {
       setStatus(subStatus);
       if (err) {
         console.error('[LiveOverlay] Subscription error:', err);
+      }
+      if (subStatus === 'SUBSCRIBED') {
+        try {
+          const { data, error } = await supabase
+            .from('overlay_state')
+            .select('state')
+            .eq('channel', channelId)
+            .single();
+          if (!error && data && data.state) {
+            // Merge fetched state, preferring newer timestamp
+            setOverlayState(prev => {
+              const fetched = data.state;
+              if (fetched.timestamp && prev.timestamp && fetched.timestamp <= prev.timestamp) {
+                return prev;
+              }
+              return { ...prev, ...fetched };
+            });
+          }
+        } catch (e) {
+          console.warn('[LiveOverlay] Error fetching persisted state:', e);
+        }
       }
     });
 
@@ -109,9 +147,10 @@ export default function LiveOverlayPage() {
 
   return (
     <div 
-      className="fixed inset-0 w-screen h-screen overflow-hidden pointer-events-none select-none"
+      className="fixed inset-0 w-screen h-screen overflow-hidden pointer-events-none select-none flex items-center justify-center bg-transparent"
       style={{
         background: 'transparent',
+        backgroundColor: 'transparent',
         margin: 0,
         padding: 0,
         border: 'none',
@@ -123,9 +162,10 @@ export default function LiveOverlayPage() {
         ref={canvasRef}
         width={1080}
         height={1920}
-        className="w-full h-full block object-contain"
+        className="w-full h-full block object-contain bg-transparent"
         style={{
           background: 'transparent',
+          backgroundColor: 'transparent',
           border: 'none',
           outline: 'none'
         }}

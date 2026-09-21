@@ -13,19 +13,33 @@ let currentKey = null;
  * Checks import.meta.env first, then falls back to localStorage runtime config.
  */
 export function getSupabaseConfig() {
-  const envUrl = import.meta.env.VITE_SUPABASE_URL;
-  const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const envUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
+  const envKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
-  const localUrl = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY_URL) : null;
-  const localKey = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY_KEY) : null;
+  let localUrl = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY_URL) : null;
+  let localKey = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY_KEY) : null;
 
-  const url = (envUrl && envUrl.trim() !== '') ? envUrl.trim() : (localUrl || '');
-  const key = (envKey && envKey.trim() !== '') ? envKey.trim() : (localKey || '');
+  // Auto-heal known typo if persisted in localStorage
+  if (localUrl && localUrl.includes('nlglojpmhgsrougzxux.supabase.co')) {
+    localUrl = localUrl.replace('nlglojpmhgsrougzxux.supabase.co', 'nlglojpmlhgsrougzxux.supabase.co');
+    try {
+      localStorage.setItem(STORAGE_KEY_URL, localUrl);
+    } catch (e) {
+      // ignore storage error
+    }
+  }
+
+  // Use localStorage if explicitly set, otherwise fallback to env
+  const rawUrl = (localUrl && localUrl.trim() !== '') ? localUrl.trim() : envUrl;
+  const rawKey = (localKey && localKey.trim() !== '') ? localKey.trim() : envKey;
+
+  const url = rawUrl.replace(/\/+$/, '');
+  const key = rawKey;
 
   return {
     url,
     key,
-    isConfigured: Boolean(url && key && url.startsWith('http'))
+    isConfigured: Boolean(url && key && (url.startsWith('http://') || url.startsWith('https://')))
   };
 }
 
@@ -33,14 +47,25 @@ export function getSupabaseConfig() {
  * Saves runtime configuration and resets the client.
  */
 export function saveSupabaseConfig(url, key) {
+  const cleanUrl = url ? url.trim().replace(/\/+$/, '') : '';
+  const cleanKey = key ? key.trim() : '';
+
   if (typeof window !== 'undefined') {
-    if (url) localStorage.setItem(STORAGE_KEY_URL, url.trim());
+    if (cleanUrl) localStorage.setItem(STORAGE_KEY_URL, cleanUrl);
     else localStorage.removeItem(STORAGE_KEY_URL);
 
-    if (key) localStorage.setItem(STORAGE_KEY_KEY, key.trim());
+    if (cleanKey) localStorage.setItem(STORAGE_KEY_KEY, cleanKey);
     else localStorage.removeItem(STORAGE_KEY_KEY);
   }
-  // Invalidate cached client
+
+  // Disconnect and invalidate cached client
+  if (cachedClient) {
+    try {
+      cachedClient.realtime?.disconnect();
+    } catch (e) {
+      console.warn('[SupabaseConfig] Error disconnecting cached client:', e);
+    }
+  }
   cachedClient = null;
   currentUrl = null;
   currentKey = null;
