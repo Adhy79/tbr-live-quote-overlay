@@ -4,6 +4,8 @@ import { getChannelName } from '../services/realtimeService';
 import { getDefaultOverlayState } from '../services/quotesService';
 import { renderOverlay } from '../canvas/overlayRenderer';
 
+import { getSavedLiveState, saveLiveState } from '../services/persistenceService';
+
 export default function LiveOverlayPage() {
   const canvasRef = useRef(null);
 
@@ -24,7 +26,14 @@ export default function LiveOverlayPage() {
     return false;
   });
 
-  const [overlayState, setOverlayState] = useState(() => getDefaultOverlayState(channelId));
+  // Do NOT initialize with default quote; use cached state or null to prevent visual flash
+  const [overlayState, setOverlayState] = useState(() => {
+    const saved = getSavedLiveState(channelId);
+    if (saved && saved.quote) {
+      return saved;
+    }
+    return null;
+  });
   const [status, setStatus] = useState('CONNECTING');
   const [configVersion, setConfigVersion] = useState(0);
 
@@ -69,9 +78,18 @@ export default function LiveOverlayPage() {
   // 2. Initial Render & Redraw whenever overlayState changes
   useEffect(() => {
     if (canvasRef.current) {
-      renderOverlay(canvasRef.current, overlayState, { showSafeZone: false });
+      if (overlayState) {
+        renderOverlay(canvasRef.current, overlayState, { showSafeZone: false });
+        saveLiveState(channelId, overlayState);
+      } else {
+        // Keep canvas completely clear and transparent while awaiting initial state
+        const ctx = canvasRef.current.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        }
+      }
     }
-  }, [overlayState]);
+  }, [overlayState, channelId]);
 
   // 3. Persistent Independent Supabase Realtime Subscription
   useEffect(() => {
@@ -83,6 +101,7 @@ export default function LiveOverlayPage() {
     if (!config.isConfigured) {
       setStatus('NOT_CONFIGURED');
       console.warn('[LIVE] Supabase is not configured.');
+      setOverlayState(prev => prev || getDefaultOverlayState(channelId));
       return;
     }
 
@@ -90,6 +109,7 @@ export default function LiveOverlayPage() {
     if (!supabase) {
       setStatus('NOT_CONFIGURED');
       console.warn('[LIVE] Supabase client failed to initialize.');
+      setOverlayState(prev => prev || getDefaultOverlayState(channelId));
       return;
     }
 
@@ -112,6 +132,7 @@ export default function LiveOverlayPage() {
 
         if (error) {
           console.warn('[LIVE] DB fetch error:', error);
+          setOverlayState(prev => prev || getDefaultOverlayState(channelId));
         } else if (data && data.state) {
           console.info('[LIVE] DB state loaded:', data.state.quote);
           setOverlayState(prev => {
@@ -119,6 +140,7 @@ export default function LiveOverlayPage() {
             // Only skip if a broadcast was received during THIS active session that is strictly newer
             if (
               fetched.timestamp &&
+              prev &&
               prev.timestamp &&
               prev.timestamp > 0 &&
               fetched.timestamp < prev.timestamp
@@ -126,13 +148,21 @@ export default function LiveOverlayPage() {
               console.info('[LIVE] In-memory broadcast is newer than DB — keeping in-memory');
               return prev;
             }
-            return { ...prev, ...fetched };
+            return fetched;
           });
+        } else {
+          setOverlayState(prev => prev || getDefaultOverlayState(channelId));
         }
       } catch (e) {
         console.warn('[LIVE] Error fetching persisted state:', e);
+        setOverlayState(prev => prev || getDefaultOverlayState(channelId));
       }
     };
+
+    // Safety fallback: if after 1500ms still uninitialized, render default
+    const fallbackTimer = setTimeout(() => {
+      setOverlayState(prev => prev || getDefaultOverlayState(channelId));
+    }, 1500);
 
     // 1. Immediately fetch latest DB state on mount
     fetchPersistedState();
@@ -208,6 +238,7 @@ export default function LiveOverlayPage() {
 
     return () => {
       console.info('[LIVE] cleanup — removing channel and listeners', channelName);
+      clearTimeout(fallbackTimer);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       try {
         supabase.removeChannel(channel);
