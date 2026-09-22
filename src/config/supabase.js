@@ -4,13 +4,17 @@ import { createClient } from '@supabase/supabase-js';
 const STORAGE_KEY_URL = 'tbr_supabase_url';
 const STORAGE_KEY_KEY = 'tbr_supabase_key';
 
+// Project default Supabase credentials (for OBS Browser Source, Incognito, and zero-config runtimes)
+const DEFAULT_SUPABASE_URL = 'https://nlglojpmlhgsrougzxux.supabase.co';
+const DEFAULT_SUPABASE_KEY = 'sb_publishable_cYxBP_-RwE5mzqy_JqTU2w_4RwuvgpI';
+
 let cachedClient = null;
 let currentUrl = null;
 let currentKey = null;
 
 /**
  * Retrieves the current Supabase configuration.
- * Checks import.meta.env first, then falls back to localStorage runtime config.
+ * Checks localStorage first, then import.meta.env, then falls back to project defaults.
  */
 export function getSupabaseConfig() {
   const envUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
@@ -29,9 +33,13 @@ export function getSupabaseConfig() {
     }
   }
 
-  // Use localStorage if explicitly set, otherwise fallback to env
-  const rawUrl = (localUrl && localUrl.trim() !== '') ? localUrl.trim() : envUrl;
-  const rawKey = (localKey && localKey.trim() !== '') ? localKey.trim() : envKey;
+  // Priority: 1. localStorage explicit override, 2. build-time env var, 3. project default credentials
+  const rawUrl = (localUrl && localUrl.trim() !== '')
+    ? localUrl.trim()
+    : (envUrl || DEFAULT_SUPABASE_URL);
+  const rawKey = (localKey && localKey.trim() !== '')
+    ? localKey.trim()
+    : (envKey || DEFAULT_SUPABASE_KEY);
 
   const url = rawUrl.replace(/\/+$/, '');
   const key = rawKey;

@@ -16,6 +16,14 @@ export default function LiveOverlayPage() {
     return 'tbr-default';
   });
 
+  const [isDebug, setIsDebug] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('debug') === '1';
+    }
+    return false;
+  });
+
   const [overlayState, setOverlayState] = useState(() => getDefaultOverlayState(channelId));
   const [status, setStatus] = useState('CONNECTING');
   const [configVersion, setConfigVersion] = useState(0);
@@ -210,6 +218,33 @@ export default function LiveOverlayPage() {
           outline: 'none'
         }}
       />
+
+      {/* Non-intrusive diagnostic badge (ONLY visible if ?debug=1 is in URL) */}
+      {isDebug && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 12,
+            left: 12,
+            zIndex: 999999,
+            backgroundColor: 'rgba(0,0,0,0.85)',
+            color: '#00f3ff',
+            border: '1px solid rgba(0,243,255,0.6)',
+            padding: '6px 10px',
+            borderRadius: '6px',
+            fontFamily: 'monospace',
+            fontSize: '11px',
+            lineHeight: '1.4',
+            pointerEvents: 'none',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.5)'
+          }}
+        >
+          <div><strong>TBR LIVE DEBUG</strong></div>
+          <div>STATUS: <span style={{ color: status === 'SUBSCRIBED' ? '#00ff88' : '#ffaa00' }}>{status}</span></div>
+          <div>CHANNEL: {channelId}</div>
+          <div>TIMESTAMP: {overlayState?.timestamp || 'none'}</div>
+        </div>
+      )}
     </div>
   );
 }
