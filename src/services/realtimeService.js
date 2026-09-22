@@ -24,7 +24,7 @@ export function subscribeToOverlay(channelId, onUpdate, onStatusChange) {
 
   if (!supabase) {
     if (onStatusChange) onStatusChange('NOT_CONFIGURED');
-    return () => {};
+    return () => { };
   }
 
   if (onStatusChange) onStatusChange('CONNECTING');
@@ -65,6 +65,7 @@ export function subscribeToOverlay(channelId, onUpdate, onStatusChange) {
 
 /**
  * Publishes an overlay update to the specified channel.
+ * Always generates a fresh timestamp so the Live page never ignores new state.
  * @param {string} channelId 
  * @param {Object} payload 
  * @param {RealtimeChannel} [existingChannel] - Optional pre-subscribed channel
@@ -78,73 +79,75 @@ export async function publishOverlayUpdate(channelId, payload, existingChannel =
     return { success: false, status: 'NOT_CONFIGURED', error: new Error('Supabase is not configured') };
   }
 
-  const timestamp = payload.timestamp || Date.now();
+  // Always use a fresh timestamp so /live never skips this push
   const enrichedPayload = {
     ...payload,
     channelId,
-    timestamp
+    timestamp: Date.now()
   };
 
-  // [RealtimeService] publishOverlayUpdate called
-console.info('[RealtimeService] PUSH TO LIVE started for channel', channelId);
+  console.info('[RealtimeService] PUSH TO LIVE started — channel:', channelId, '| channelName:', channelName);
+  console.info('[RealtimeService] broadcast event: overlay_update | timestamp:', enrichedPayload.timestamp);
 
-// Upsert the current state into Supabase persistence table
-try {
-  const { error: upsertError } = await supabase
-    .from('overlay_state')
-    .upsert({ channel: channelId, state: enrichedPayload }, { onConflict: 'channel' });
-  if (upsertError) {
-    console.error('[RealtimeService] database upsert ERROR:', upsertError);
-  } else {
-    console.info('[RealtimeService] database upsert SUCCESS');
-  }
-} catch (e) {
-  console.error('[RealtimeService] database upsert EXCEPTION:', e);
-}
-
-// After persisting, broadcast overlay update
-console.info('[RealtimeService] broadcasting overlay_update');
-if (existingChannel) {
+  // 1. Upsert the current state into Supabase persistence table
+  console.info('[RealtimeService] database upsert started');
   try {
-    const resp = await existingChannel.send({
-      type: 'broadcast',
-      event: 'overlay_update',
-      payload: enrichedPayload
-    });
-    console.info('[RealtimeService] broadcast SUCCESS, response:', resp);
-    return { success: resp === 'ok', status: resp };
-  } catch (err) {
-    console.error('[RealtimeService] broadcast ERROR:', err);
-    return { success: false, status: 'ERROR', error: err };
-  }
-}
-
-// Otherwise create a temporary channel and send broadcast
-return new Promise((resolve) => {
-  const channel = supabase.channel(channelName, {
-    config: { broadcast: { ack: true } }
-  });
-  channel.subscribe(async (status) => {
-    if (status === 'SUBSCRIBED') {
-      try {
-        const resp = await channel.send({
-          type: 'broadcast',
-          event: 'overlay_update',
-          payload: enrichedPayload
-        });
-        console.info('[RealtimeService] temp channel broadcast SUCCESS, response:', resp);
-        supabase.removeChannel(channel);
-        resolve({ success: resp === 'ok', status: resp });
-      } catch (err) {
-        console.error('[RealtimeService] temp channel broadcast ERROR:', err);
-        supabase.removeChannel(channel);
-        resolve({ success: false, status: 'ERROR', error: err });
-      }
-    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-      console.warn('[RealtimeService] channel subscription error status:', status);
-      supabase.removeChannel(channel);
-      resolve({ success: false, status });
+    const { error: upsertError } = await supabase
+      .from('overlay_state')
+      .upsert({ channel: channelId, state: enrichedPayload }, { onConflict: 'channel' });
+    if (upsertError) {
+      console.error('[RealtimeService] database upsert ERROR:', upsertError);
+    } else {
+      console.info('[RealtimeService] database upsert SUCCESS');
     }
+  } catch (e) {
+    console.error('[RealtimeService] database upsert EXCEPTION:', e);
+  }
+
+  // 2. Broadcast overlay update via existing subscribed channel (preferred path)
+  console.info('[RealtimeService] broadcast started');
+  if (existingChannel) {
+    try {
+      const resp = await existingChannel.send({
+        type: 'broadcast',
+        event: 'overlay_update',
+        payload: enrichedPayload
+      });
+      console.info('[RealtimeService] broadcast SUCCESS, response:', resp);
+      return { success: resp === 'ok', status: resp };
+    } catch (err) {
+      console.error('[RealtimeService] broadcast ERROR:', err);
+      return { success: false, status: 'ERROR', error: err };
+    }
+  }
+
+  // 3. Fallback: create a temporary channel, subscribe, send, then clean up
+  console.info('[RealtimeService] no existingChannel — creating temp channel:', channelName);
+  return new Promise((resolve) => {
+    const channel = supabase.channel(channelName, {
+      config: { broadcast: { ack: true } }
+    });
+    channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        try {
+          const resp = await channel.send({
+            type: 'broadcast',
+            event: 'overlay_update',
+            payload: enrichedPayload
+          });
+          console.info('[RealtimeService] temp channel broadcast SUCCESS, response:', resp);
+          supabase.removeChannel(channel);
+          resolve({ success: resp === 'ok', status: resp });
+        } catch (err) {
+          console.error('[RealtimeService] temp channel broadcast ERROR:', err);
+          supabase.removeChannel(channel);
+          resolve({ success: false, status: 'ERROR', error: err });
+        }
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        console.warn('[RealtimeService] temp channel error status:', status);
+        supabase.removeChannel(channel);
+        resolve({ success: false, status });
+      }
+    });
   });
-});
 }

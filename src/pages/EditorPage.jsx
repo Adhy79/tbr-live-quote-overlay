@@ -124,9 +124,11 @@ export default function EditorPage() {
   // Handle Push to Live
   const handlePushToLive = useCallback(async (stateToPush = overlayState) => {
     if (channelStatus !== 'SUBSCRIBED') {
+      console.warn('[EDITOR] cannot push, not SUBSCRIBED');
       return;
     }
 
+    console.info('[EDITOR] PUSH TO LIVE started');
     setIsPushing(true);
     try {
       const res = await publishOverlayUpdate(
@@ -134,14 +136,15 @@ export default function EditorPage() {
         stateToPush,
         activeChannelRef.current
       );
-
       if (res.success) {
+        console.info('[EDITOR] database upsert SUCCESS');
+        console.info('[EDITOR] broadcast SUCCESS');
         setLastPushedTime(Date.now());
       } else {
-        console.error('[Editor] Push failed:', res);
+        console.error('[EDITOR] Push failed:', res);
       }
     } catch (err) {
-      console.error('[Editor] Push error:', err);
+      console.error('[EDITOR] Push error:', err);
     } finally {
       setIsPushing(false);
     }

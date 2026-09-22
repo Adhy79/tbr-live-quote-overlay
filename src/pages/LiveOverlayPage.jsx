@@ -65,88 +65,128 @@ export default function LiveOverlayPage() {
     }
   }, [overlayState]);
 
-  // 2. Persistent Independent Supabase Realtime Subscription
+  // 3. Persistent Independent Supabase Realtime Subscription
   useEffect(() => {
+    console.info('[LIVE] initializing');
+
     const config = getSupabaseConfig();
+    console.info('[LIVE] Supabase config isConfigured:', config.isConfigured);
+
     if (!config.isConfigured) {
       setStatus('NOT_CONFIGURED');
-      console.warn('[LiveOverlay] Supabase is not configured.');
+      console.warn('[LIVE] Supabase is not configured.');
       return;
     }
 
     const supabase = getSupabaseClient();
     if (!supabase) {
       setStatus('NOT_CONFIGURED');
+      console.warn('[LIVE] Supabase client failed to initialize.');
       return;
     }
 
     const channelName = getChannelName(channelId);
+    console.info('[LIVE] channel:', channelId);
+    console.info('[LIVE] realtime channel:', channelName);
+    console.info('[LIVE] subscribing');
+
     setStatus('CONNECTING');
 
-    // Subscribe to channel (broadcast only)
+    // Create channel — broadcast only, no self-echo needed on Live side
     const channel = supabase.channel(channelName, {
       config: {
-        broadcast: { ack: true }
+        broadcast: { ack: false }
       }
     });
 
-    // Listen for broadcast overlay updates
+    // Listen for broadcast overlay updates — MUST be registered before .subscribe()
     channel.on(
       'broadcast',
       { event: 'overlay_update' },
       (eventData) => {
+        console.info('[LIVE] BROADCAST RECEIVED');
+        console.info('[LIVE] broadcast payload:', eventData && eventData.payload);
+
         if (eventData && eventData.payload) {
           const payload = eventData.payload;
           if (typeof payload === 'object' && payload !== null) {
-            setOverlayState(prev => ({
-              ...prev,
-              ...payload
-            }));
+            console.info('[LIVE] applying broadcast state');
+            setOverlayState(prev => {
+              // Timestamp guard: never apply older state over newer
+              if (
+                payload.timestamp &&
+                prev.timestamp &&
+                payload.timestamp <= prev.timestamp
+              ) {
+                console.warn('[LIVE] broadcast timestamp older than current — skipping');
+                return prev;
+              }
+              return { ...prev, ...payload };
+            });
           }
         }
       }
     );
 
-    // Subscribe and handle initial state fetch
+    // Subscribe and handle initial persisted state fetch on SUBSCRIBED
     channel.subscribe(async (subStatus, err) => {
+      console.info('[LIVE] subscription status:', subStatus);
       setStatus(subStatus);
+
       if (err) {
-        console.error('[LiveOverlay] Subscription error:', err);
+        console.error('[LIVE] SUBSCRIPTION ERROR:', err);
       }
+
+      if (subStatus === 'CHANNEL_ERROR') {
+        console.error('[LIVE] CHANNEL ERROR');
+      }
+
+      if (subStatus === 'CLOSED') {
+        console.warn('[LIVE] CHANNEL CLOSED');
+      }
+
       if (subStatus === 'SUBSCRIBED') {
+        console.info('[LIVE] SUBSCRIBED — fetching persisted state from DB');
         try {
           const { data, error } = await supabase
             .from('overlay_state')
             .select('state')
             .eq('channel', channelId)
             .single();
-          if (!error && data && data.state) {
-            // Merge fetched state, preferring newer timestamp
+
+          if (error) {
+            console.warn('[LIVE] DB fetch error:', error);
+          } else if (data && data.state) {
+            console.info('[LIVE] DB state loaded, applying');
             setOverlayState(prev => {
               const fetched = data.state;
+              // Prefer the already-in-memory state if it's newer (e.g. arrived via broadcast before DB settled)
               if (fetched.timestamp && prev.timestamp && fetched.timestamp <= prev.timestamp) {
+                console.info('[LIVE] DB state is older than current — skipping');
                 return prev;
               }
               return { ...prev, ...fetched };
             });
           }
         } catch (e) {
-          console.warn('[LiveOverlay] Error fetching persisted state:', e);
+          console.warn('[LIVE] Error fetching persisted state:', e);
         }
+        // Channel stays alive — DO NOT removeChannel here
       }
     });
 
     return () => {
+      console.info('[LIVE] cleanup — removing channel', channelName);
       try {
         supabase.removeChannel(channel);
       } catch (e) {
-        console.warn('[LiveOverlay] Error removing channel:', e);
+        console.warn('[LIVE] Error removing channel:', e);
       }
     };
   }, [channelId, configVersion]);
 
   return (
-    <div 
+    <div
       className="fixed inset-0 w-screen h-screen overflow-hidden pointer-events-none select-none flex items-center justify-center bg-transparent"
       style={{
         background: 'transparent',
