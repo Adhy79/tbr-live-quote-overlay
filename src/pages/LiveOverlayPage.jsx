@@ -100,7 +100,53 @@ export default function LiveOverlayPage() {
 
     setStatus('CONNECTING');
 
-    // Create channel — broadcast only, no self-echo needed on Live side
+    // Helper to fetch authoritative persisted state from Supabase
+    const fetchPersistedState = async () => {
+      try {
+        console.info('[LIVE] fetching persisted state from DB for channel:', channelId);
+        const { data, error } = await supabase
+          .from('overlay_state')
+          .select('state')
+          .eq('channel', channelId)
+          .single();
+
+        if (error) {
+          console.warn('[LIVE] DB fetch error:', error);
+        } else if (data && data.state) {
+          console.info('[LIVE] DB state loaded:', data.state.quote);
+          setOverlayState(prev => {
+            const fetched = data.state;
+            // Only skip if a broadcast was received during THIS active session that is strictly newer
+            if (
+              fetched.timestamp &&
+              prev.timestamp &&
+              prev.timestamp > 0 &&
+              fetched.timestamp < prev.timestamp
+            ) {
+              console.info('[LIVE] In-memory broadcast is newer than DB — keeping in-memory');
+              return prev;
+            }
+            return { ...prev, ...fetched };
+          });
+        }
+      } catch (e) {
+        console.warn('[LIVE] Error fetching persisted state:', e);
+      }
+    };
+
+    // 1. Immediately fetch latest DB state on mount
+    fetchPersistedState();
+
+    // 2. Refresh DB state when OBS switches back to this scene (tab becomes visible)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.info('[LIVE] scene became visible — syncing latest DB state');
+        fetchPersistedState();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // 3. Create channel — broadcast only, no self-echo needed on Live side
     const channel = supabase.channel(channelName, {
       config: {
         broadcast: { ack: false }
@@ -120,11 +166,12 @@ export default function LiveOverlayPage() {
           if (typeof payload === 'object' && payload !== null) {
             console.info('[LIVE] applying broadcast state');
             setOverlayState(prev => {
-              // Timestamp guard: never apply older state over newer
+              // Timestamp guard: only skip if payload is strictly older than active state
               if (
                 payload.timestamp &&
                 prev.timestamp &&
-                payload.timestamp <= prev.timestamp
+                prev.timestamp > 0 &&
+                payload.timestamp < prev.timestamp
               ) {
                 console.warn('[LIVE] broadcast timestamp older than current — skipping');
                 return prev;
@@ -136,7 +183,7 @@ export default function LiveOverlayPage() {
       }
     );
 
-    // Subscribe and handle initial persisted state fetch on SUBSCRIBED
+    // Subscribe and sync DB state on SUBSCRIBED
     channel.subscribe(async (subStatus, err) => {
       console.info('[LIVE] subscription status:', subStatus);
       setStatus(subStatus);
@@ -154,37 +201,14 @@ export default function LiveOverlayPage() {
       }
 
       if (subStatus === 'SUBSCRIBED') {
-        console.info('[LIVE] SUBSCRIBED — fetching persisted state from DB');
-        try {
-          const { data, error } = await supabase
-            .from('overlay_state')
-            .select('state')
-            .eq('channel', channelId)
-            .single();
-
-          if (error) {
-            console.warn('[LIVE] DB fetch error:', error);
-          } else if (data && data.state) {
-            console.info('[LIVE] DB state loaded, applying');
-            setOverlayState(prev => {
-              const fetched = data.state;
-              // Prefer the already-in-memory state if it's newer (e.g. arrived via broadcast before DB settled)
-              if (fetched.timestamp && prev.timestamp && fetched.timestamp <= prev.timestamp) {
-                console.info('[LIVE] DB state is older than current — skipping');
-                return prev;
-              }
-              return { ...prev, ...fetched };
-            });
-          }
-        } catch (e) {
-          console.warn('[LIVE] Error fetching persisted state:', e);
-        }
-        // Channel stays alive — DO NOT removeChannel here
+        console.info('[LIVE] SUBSCRIBED — syncing persisted state from DB');
+        fetchPersistedState();
       }
     });
 
     return () => {
-      console.info('[LIVE] cleanup — removing channel', channelName);
+      console.info('[LIVE] cleanup — removing channel and listeners', channelName);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       try {
         supabase.removeChannel(channel);
       } catch (e) {

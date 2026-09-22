@@ -977,6 +977,6 @@ export function getDefaultOverlayState(channelId = 'tbr-default') {
     subHeader: initial.subHeader,
     footerText: initial.footerText,
     secondaryFooter: 'LIVE BROADCAST // 1080x1920',
-    timestamp: Date.now()
+    timestamp: 0
   };
 }
